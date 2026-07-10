@@ -55,8 +55,14 @@ assert_contains "$defaults_output" "~/.claude" "defaults should include Claude"
 assert_contains "$defaults_output" "Cursor/User/globalStorage" "defaults should include Cursor"
 assert_not_contains "$defaults_output" "#" "defaults should not include comments"
 
+bin_link_dir="$TMP_ROOT/node_modules/.bin"
+mkdir -p "$bin_link_dir"
+ln -s "$BIN" "$bin_link_dir/agent-state-usage"
+link_defaults_output="$("$bin_link_dir/agent-state-usage" --list-defaults)"
+assert_contains "$link_defaults_output" "~/.codex" "symlinked bin should find default paths"
+
 version_output="$("$BIN" --version)"
-[[ "$version_output" == "0.1.0" ]] || fail "version should print package version"
+[[ "$version_output" == "0.1.1" ]] || fail "version should print package version"
 
 fixture="$(make_fixture)"
 human_output="$("$BIN" --top 10 "$fixture")"
