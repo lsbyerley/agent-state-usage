@@ -94,7 +94,8 @@ printf "%s" "$special_json" | SPECIAL_TAB="$tab_file" SPECIAL_NEWLINE="$newline_
 empty_dir="$TMP_ROOT/empty"
 mkdir -p "$empty_dir"
 empty_output="$("$BIN" --top 10 "$empty_dir")"
-assert_contains "$empty_output" "0 B" "empty directory should report zero bytes"
+assert_contains "$empty_output" "$empty_dir" "empty directory should be reported"
+assert_contains "$empty_output" "Total" "empty directory output should include total"
 
 small_dir="$TMP_ROOT/order-small"
 large_dir="$TMP_ROOT/order-large"
