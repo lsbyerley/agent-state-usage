@@ -1,6 +1,6 @@
 {
   "name": "agent-state-usage",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Displays and reports disk usage for local AI agent state directories.",
   "homepage": "https://github.com/lsbyerley/agent-state-usage",
   "author": "lucasb.dev",

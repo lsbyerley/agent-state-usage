@@ -62,7 +62,7 @@ link_defaults_output="$("$bin_link_dir/agent-state-usage" --list-defaults)"
 assert_contains "$link_defaults_output" "~/.codex" "symlinked bin should find default paths"
 
 version_output="$("$BIN" --version)"
-[[ "$version_output" == "0.1.1" ]] || fail "version should print package version"
+[[ "$version_output" == "0.1.2" ]] || fail "version should print package version"
 
 fixture="$(make_fixture)"
 human_output="$("$BIN" --top 10 "$fixture")"
