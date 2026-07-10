@@ -1,0 +1,274 @@
+#!/usr/bin/env bash
+set -e
+
+usage() {
+  cat <<'EOF'
+Usage: agent-state-usage [options] [path ...]
+
+Reports disk usage for local AI agent state directories.
+
+Options:
+  --json           Emit machine-readable JSON.
+  --top N          Show the N largest files. Default: 20.
+  --list-defaults  Show configured default paths.
+  --version        Show version.
+  --help          Show this help.
+
+If no paths are provided, the script checks default paths from:
+  data/agent-paths.txt
+
+Examples:
+  agent-state-usage
+  agent-state-usage --list-defaults
+  agent-state-usage --top 50 ~/.codex ~/.agents
+  agent-state-usage --json
+EOF
+}
+
+script_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+default_paths_file="$script_dir/../data/agent-paths.txt"
+package_json_file="$script_dir/../package.json"
+json=false
+top=20
+paths=()
+
+read_default_paths() {
+  local line
+
+  if [[ ! -f "$default_paths_file" ]]; then
+    return
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    paths+=("$line")
+  done < "$default_paths_file"
+}
+
+list_default_paths() {
+  local line
+
+  if [[ ! -f "$default_paths_file" ]]; then
+    return
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+    printf "%s\n" "$line"
+  done < "$default_paths_file"
+}
+
+package_version() {
+  awk -F\" '/"version"[[:space:]]*:/ { print $4; exit }' "$package_json_file"
+}
+
+while (($#)); do
+  case "$1" in
+    --json)
+      json=true
+      shift
+      ;;
+    --top)
+      if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ ]]; then
+        echo "error: --top requires a non-negative integer" >&2
+        exit 2
+      fi
+      top="$2"
+      shift 2
+      ;;
+    --list-defaults)
+      list_default_paths
+      exit 0
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --version|-v)
+      package_version
+      exit 0
+      ;;
+    --)
+      shift
+      while (($#)); do
+        paths+=("$1")
+        shift
+      done
+      ;;
+    -*)
+      echo "error: unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+    *)
+      paths+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if ((${#paths[@]} == 0)); then
+  read_default_paths
+fi
+
+existing_paths=()
+for path in "${paths[@]}"; do
+  expanded_path="${path/#\~/$HOME}"
+  if [[ "$expanded_path" == -* ]]; then
+    expanded_path="./$expanded_path"
+  fi
+  if [[ -e "$expanded_path" ]]; then
+    existing_paths+=("$expanded_path")
+  fi
+done
+
+human_size() {
+  local bytes="$1"
+  local units=(B KB MB GB TB)
+  local unit=0
+  local value="$bytes"
+
+  while ((value >= 1024 && unit < ${#units[@]} - 1)); do
+    value=$((value / 1024))
+    unit=$((unit + 1))
+  done
+
+  printf "%s %s" "$value" "${units[$unit]}"
+}
+
+json_escape() {
+  local value="$1"
+  perl -e '
+    my $value = shift;
+    $value =~ s/\\/\\\\/g;
+    $value =~ s/"/\\"/g;
+    $value =~ s/\n/\\n/g;
+    $value =~ s/\r/\\r/g;
+    $value =~ s/\t/\\t/g;
+    $value =~ s/([\x00-\x08\x0b\x0c\x0e-\x1f])/sprintf("\\u%04x", ord($1))/eg;
+    print $value;
+  ' -- "$value"
+}
+
+path_encode() {
+  perl -e 'print unpack("H*", shift)' -- "$1"
+}
+
+path_decode() {
+  perl -e 'print pack("H*", shift)' -- "$1"
+}
+
+path_size_bytes() {
+  du -sk "$1" 2>/dev/null | awk 'NR == 1 { print $1 * 1024 }'
+}
+
+collect_largest_files() {
+  if ((top == 0)); then
+    return
+  fi
+
+  perl -MFile::Find -e '
+    my ($top, @roots) = @ARGV;
+    my @entries;
+
+    find(
+      {
+        no_chdir => 1,
+        wanted => sub {
+          my @stat = lstat($_);
+          return unless @stat && -f _;
+          my $blocks = $stat[12] || int(($stat[7] + 511) / 512);
+          my $size_kb = int(($blocks + 1) / 2);
+          push @entries, [$size_kb, unpack("H*", $_)];
+        },
+      },
+      @roots
+    );
+
+    @entries = sort { $b->[0] <=> $a->[0] || $a->[1] cmp $b->[1] } @entries;
+    my $limit = $top < @entries ? $top : scalar @entries;
+    for my $i (0 .. $limit - 1) {
+      print "$entries[$i][0]\t$entries[$i][1]\n";
+    }
+  ' -- "$top" "${existing_paths[@]}" 2>/dev/null
+}
+
+if ((${#existing_paths[@]} == 0)); then
+  if [[ "$json" == true ]]; then
+    printf '{"total_bytes":0,"paths":[],"largest_files":[]}\n'
+  else
+    echo "No agent state paths found."
+  fi
+  exit 0
+fi
+
+total=0
+path_sizes=()
+path_names=()
+for path in "${existing_paths[@]}"; do
+  size="$(path_size_bytes "$path")"
+  total=$((total + size))
+  path_sizes+=("$size")
+  path_names+=("$path")
+done
+
+largest_entries="$(collect_largest_files)"
+path_entries="$(
+  for i in "${!path_sizes[@]}"; do
+    printf "%s\t%s\n" "${path_sizes[$i]}" "$(path_encode "${path_names[$i]}")"
+  done | sort -nr
+)"
+
+if [[ "$json" == true ]]; then
+  printf '{"total_bytes":%s,"paths":[' "$total"
+  first=true
+  while IFS=$'\t' read -r size encoded_path; do
+    [[ -z "${size:-}" || -z "${encoded_path:-}" ]] && continue
+    path="$(path_decode "$encoded_path")"
+    [[ "$first" == true ]] || printf ','
+    first=false
+    printf '{"path":"%s","bytes":%s}' "$(json_escape "$path")" "$size"
+  done <<< "$path_entries"
+
+  printf '],"largest_files":['
+  first=true
+  while IFS=$'\t' read -r size encoded_path; do
+    [[ -z "${size:-}" || -z "${encoded_path:-}" ]] && continue
+    path="$(path_decode "$encoded_path")"
+    [[ "$first" == true ]] || printf ','
+    first=false
+    printf '{"path":"%s","bytes":%s}' "$(json_escape "$path")" "$((size * 1024))"
+  done <<< "$largest_entries"
+  printf ']}\n'
+  exit 0
+fi
+
+echo "Agent state disk usage"
+echo
+printf "%12s  %s\n" "Size" "Path"
+printf "%12s  %s\n" "------------" "----"
+while IFS=$'\t' read -r size encoded_path; do
+  [[ -z "${size:-}" || -z "${encoded_path:-}" ]] && continue
+  path="$(path_decode "$encoded_path")"
+  printf "%12s  %s\n" "$(human_size "$size")" "$path"
+done <<< "$path_entries"
+printf "%12s  %s\n" "------------" "----"
+printf "%12s  %s\n" "$(human_size "$total")" "Total"
+
+if ((top > 0)); then
+  echo
+  echo "Largest files"
+  printf "%12s  %s\n" "Size" "Path"
+  printf "%12s  %s\n" "------------" "----"
+  while IFS=$'\t' read -r size encoded_path; do
+    [[ -z "${size:-}" || -z "${encoded_path:-}" ]] && continue
+    path="$(path_decode "$encoded_path")"
+    printf "%12s  %s\n" "$(human_size "$((size * 1024))")" "$path"
+  done <<< "$largest_entries"
+fi

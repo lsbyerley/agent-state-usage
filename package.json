@@ -1,0 +1,35 @@
+{
+  "name": "agent-state-usage",
+  "version": "0.1.0",
+  "description": "Displays and reports disk usage for local AI agent state directories.",
+  "homepage": "https://github.com/lsbyerley/agent-state-usage",
+  "author": "lucasb.dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lsbyerley/agent-state-usage.git"
+  },
+  "bin": {
+    "agent-state-usage": "bin/agent-state-usage"
+  },
+  "files": [
+    "bin",
+    "data",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "bin/agent-state-usage",
+    "test": "test/cli.sh",
+    "prepack": "npm test"
+  },
+  "keywords": [
+    "agent",
+    "ai-agent",
+    "codex",
+    "claude",
+    "cursor",
+    "disk-usage",
+    "cli"
+  ]
+}

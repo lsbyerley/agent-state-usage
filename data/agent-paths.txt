@@ -1,0 +1,23 @@
+# Default AI agent state paths checked by agent-state-usage.
+#
+# Add one path per line. Blank lines and comments are ignored.
+# A leading ~ is expanded to the current user's home directory.
+
+# Terminal and CLI agents
+~/.codex
+~/.agents
+~/.claude
+~/.aider
+~/.config/aider
+~/.continue
+~/.config/continue
+~/.local/share/opencode
+
+# Editor-based agents and assistants
+~/.cursor
+~/.config/Cursor/User/globalStorage
+~/Library/Application Support/Cursor/User/globalStorage
+~/.config/Windsurf/User/globalStorage
+~/Library/Application Support/Windsurf/User/globalStorage
+~/.config/Code/User/globalStorage
+~/Library/Application Support/Code/User/globalStorage
